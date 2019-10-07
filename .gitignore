@@ -1,2 +1,29 @@
+# Intellij
+.idea/
+*.iml
+*.iws
+*.iml
+*.ipr
+
+# Mac
+.DS_Store
+
+# Maven
+log/
+target/
+
+
+# Compiled class file
 *.class
+
+# Log file
 *.log
+
+# Package Files #
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
