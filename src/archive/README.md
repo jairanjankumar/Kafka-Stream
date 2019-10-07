@@ -1,0 +1,1 @@
+Move the files to this directory after sending all the records to Kafka server
