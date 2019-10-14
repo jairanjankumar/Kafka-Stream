@@ -1,0 +1,5 @@
+package fileutils
+
+object FileUtil {
+
+}

@@ -1,0 +1,5 @@
+package kafkautils
+
+object Dispatcher {
+
+}
