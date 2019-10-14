@@ -1,19 +1,21 @@
 import java.io.File
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.util.Properties
 import java.util.concurrent.Executors
 
-import com.fasterxml.jackson.databind.MappingIterator
+import com.fasterxml.jackson.databind.{JsonNode, MappingIterator, ObjectMapper}
 import com.fasterxml.jackson.dataformat.csv.CsvMapper
-import org.apache.kafka.clients.producer._
-
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
-import scala.language.postfixOps
-import scala.util.{Failure, Success}
-import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.{ProducerConfig, _}
 import org.apache.kafka.common.serialization.StringSerializer
 
-object Producer {
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.language.postfixOps
+import fileutils.FileUtil._
+import kafkautils.Dispatcher._
+
+import scala.util.{Failure, Success}
+
+object StockDataProducer {
 
   def main(args: Array[String] = Array("3", "stock-data-topic")): Unit = {
 
@@ -25,81 +27,53 @@ object Producer {
     files.map { file =>
       Future {
         readAndSendToKafka(file)
+      }.onComplete {
+        case Success(value) => {
+          println("Success")
+          Files.move(
+            Paths.get(file.getPath),
+            Paths.get("./archive/" + file.getName),
+            StandardCopyOption.REPLACE_EXISTING
+          )
+        }
+        case Failure(exception) => println(s"Failure ~ ${exception.printStackTrace()}")
       }
     }
 
-    /*    files.foreach(k => getStocks(k).foreach {
-          g =>
-            Future {
-              writeToKafka(g)
-            }
-        })*/
-
-    /*    val f: List[Future[Unit]] = files.map { f =>
-
-        }
-
-        f.map {
-          _.onComplete {
-            case Success(a) => println(s"done  $a")
-            case Failure(b) => println(b.getMessage);
-          }
-        }
-
-        f.map { k =>
-          Await.result(k, 2000 second);
-        }*/
-
-    Thread.sleep(100000)
-
-
-  }
-
-  def getListOfFiles(dir: String): List[File] = {
-    val d = new File(dir)
-    if (d.exists && d.isDirectory) {
-      d.listFiles.filter(_.isFile).toList
-    } else {
-      List[File]()
-    }
+    Thread.sleep(10000)
   }
 
   def readAndSendToKafka(file: File)(implicit kafkaTopic: String) = {
-    val dayStockData = getStocks(file)
-    dayStockData.map(writeToKafka)
+
+    val dayStockData: List[StockData] = getStockData(file)
+    dayStockData.flatMap { stockData =>
+      List[JsonNode](new ObjectMapper().valueToTree(stockData))
+    }.map {
+      recValue =>
+        val producerRecord = new ProducerRecord[String, JsonNode](kafkaTopic, recValue.hashCode().toString, recValue)
+        writeToKafka[String, JsonNode](producerProperties(), producerRecord)
+    }
   }
 
-  def getStocks(dataFile: File): List[StockData] = {
+  def getStockData(dataFile: File): List[StockData] = {
 
     import scala.jdk.CollectionConverters._
 
     val d: MappingIterator[StockData] = new CsvMapper().readerWithTypedSchemaFor(classOf[StockData]).readValues(dataFile)
-    val i = d.readAll()
-    i.asScala.toList
+    d.readAll().asScala.toList
   }
 
-  def writeToKafka(stockData: StockData)(implicit kafkaTopic: String): Unit = {
+
+  def producerProperties(): Properties = {
 
     val props = new Properties()
-
-    import java.io.InputStream
     val kafkaConfigStream = classOf[ClassLoader].getResourceAsStream("/kafka.properties")
     props.load(kafkaConfigStream)
 
     // props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, classOf[StringSerializer].getName)
-    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[JsonSerializer[StockData]].getName)
-    val producer = new KafkaProducer[String, StockData](props)
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, classOf[JsonSerializer].getName)
 
-    val record: ProducerRecord[String, StockData] = new ProducerRecord[String, StockData](kafkaTopic, stockData.hashCode.toString, stockData)
-
-
-    println("hahaha : " + stockData)
-
-    Thread.sleep(2000)
-
-    producer.send(record)
-    // }
-    producer.close()
+    props
   }
 }

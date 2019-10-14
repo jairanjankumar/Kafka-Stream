@@ -38,7 +38,6 @@ public class JsonSerializer implements Serializer<JsonNode> {
         }
     }
 
-
     public void close() {
 
     }
