@@ -19,12 +19,12 @@ object StockDataProducer {
 
   def main(args: Array[String] = Array("3", "stock-data-topic")): Unit = {
 
-    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(args(0).toInt))
-    implicit val kafkaTopic: String = args(1)
+    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(args.lift(0).getOrElse("3").toInt))
+    implicit val kafkaTopic: String = args.lift(1).getOrElse("stock-data-topic")
 
     val files: List[File] = getListOfFiles("./inputfilesdirectory")
 
-    files.map { file =>
+    files foreach { file =>
       Future {
         readAndSendToKafka(file)
       }.onComplete {
@@ -43,16 +43,16 @@ object StockDataProducer {
     Thread.sleep(10000)
   }
 
-  def readAndSendToKafka(file: File)(implicit kafkaTopic: String) = {
+  def readAndSendToKafka(file: File)(implicit kafkaTopic: String): Unit = {
 
     val dayStockData: List[StockData] = getStockData(file)
-    dayStockData.flatMap { stockData =>
-      List[JsonNode](new ObjectMapper().valueToTree(stockData))
-    }.map {
-      recValue =>
+
+    dayStockData
+      .flatMap(stockData => List[JsonNode](new ObjectMapper().valueToTree(stockData)))
+      .foreach { recValue =>
         val producerRecord = new ProducerRecord[String, JsonNode](kafkaTopic, recValue.hashCode().toString, recValue)
         writeToKafka[String, JsonNode](producerProperties(), producerRecord)
-    }
+      }
   }
 
   def getStockData(dataFile: File): List[StockData] = {
