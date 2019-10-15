@@ -1,5 +1,4 @@
 import java.io.File
-import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.util.Properties
 import java.util.concurrent.Executors
 
@@ -8,39 +7,42 @@ import com.fasterxml.jackson.dataformat.csv.CsvMapper
 import org.apache.kafka.clients.producer.{ProducerConfig, _}
 import org.apache.kafka.common.serialization.StringSerializer
 
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{Await, ExecutionContext, ExecutionContextExecutor, Future}
 import scala.language.postfixOps
 import fileutils.FileUtil._
 import kafkautils.Dispatcher._
 
 import scala.util.{Failure, Success}
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
 object StockDataProducer {
 
-  def main(args: Array[String] = Array("3", "stock-data-topic")): Unit = {
+  def main(args: Array[String]): Unit = {
 
     implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(args.lift(0).getOrElse("3").toInt))
     implicit val kafkaTopic: String = args.lift(1).getOrElse("stock-data-topic")
+    val inputFilesDirectory: String = args.lift(2).getOrElse("./inputfilesdirectory")
+    val archiveDirectory: String = args.lift(3).getOrElse("./archive")
 
-    val files: List[File] = getListOfFiles("./inputfilesdirectory")
+    val files: List[File] = getListOfFiles(inputFilesDirectory)
 
     files foreach { file =>
-      Future {
+
+      val sendToKafka = Future {
         readAndSendToKafka(file)
-      }.onComplete {
-        case Success(value) => {
-          println("Success")
-          Files.move(
-            Paths.get(file.getPath),
-            Paths.get("./archive/" + file.getName),
-            StandardCopyOption.REPLACE_EXISTING
-          )
+      }
+
+      sendToKafka.onComplete {
+        case Success(_) => {
+          //println("Success")
+          moveFiles(file.getPath, archiveDirectory + "/" + file.getName)
         }
         case Failure(exception) => println(s"Failure ~ ${exception.printStackTrace()}")
       }
-    }
 
-    Thread.sleep(10000)
+      Await.result(sendToKafka, 60 second);
+    }
   }
 
   def readAndSendToKafka(file: File)(implicit kafkaTopic: String): Unit = {
@@ -56,8 +58,6 @@ object StockDataProducer {
   }
 
   def getStockData(dataFile: File): List[StockData] = {
-
-    import scala.jdk.CollectionConverters._
 
     val d: MappingIterator[StockData] = new CsvMapper().readerWithTypedSchemaFor(classOf[StockData]).readValues(dataFile)
     d.readAll().asScala.toList

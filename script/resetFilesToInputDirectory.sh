@@ -1,0 +1,1 @@
+mv archive/cm* inputfilesdirectory/
