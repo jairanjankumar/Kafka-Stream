@@ -50,7 +50,7 @@ while (deadline.hasTimeLeft) { ...`
 a. ThreadPool size
 b. Kafka-topic
 c. inputFilesDirectory
-4. archive directory
+d. archive directory
 
 Example: `4 stock-data-topic ./inputfilesdirectory ./archive`
 
