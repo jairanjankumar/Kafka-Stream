@@ -20,11 +20,12 @@ object StockDataProducer {
 
   def main(args: Array[String]): Unit = {
 
-    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(args.lift(0).getOrElse("3").toInt))
+    val threadpool = args.lift(0).getOrElse("3").toInt
     implicit val kafkaTopic: String = args.lift(1).getOrElse("stock-data-topic")
     val inputFilesDirectory: String = args.lift(2).getOrElse("./inputfilesdirectory")
     val archiveDirectory: String = args.lift(3).getOrElse("./archive")
 
+    implicit val ec: ExecutionContextExecutor = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(threadpool))
     val files: List[File] = getListOfFiles(inputFilesDirectory)
 
     files foreach { file =>
@@ -34,10 +35,7 @@ object StockDataProducer {
       }
 
       sendToKafka.onComplete {
-        case Success(_) => {
-          //println("Success")
-          moveFiles(file.getPath, archiveDirectory + "/" + file.getName)
-        }
+        case Success(_) => moveFiles(file.getPath, archiveDirectory + "/" + file.getName)
         case Failure(exception) => println(s"Failure ~ ${exception.printStackTrace()}")
       }
 
